@@ -1,16 +1,18 @@
 const puppeteer = require('puppeteer');
 
 async function scraper() {
-    // Launch Puppeteer with headless mode disabled
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
 
-    await page.goto('https://google.com');  // Replace with actual URL
+    await page.goto('https://www.macmap.org/');  // Replace with the actual target URL
 
-    // Perform scraping logic here, e.g.:
+    // Wait for the checkbox input with `type="checkbox"` and click it
+    await page.waitForSelector('input[type="checkbox"]');
+    await page.click('input[type="checkbox"]');
+
+    // Additional scraping or actions can go here
     const data = await page.evaluate(() => {
-        // Return scraped data as JSON
-        return { message: 'Scraped data here' };
+        return { message: 'Checkbox clicked successfully' };
     });
 
     await browser.close();
