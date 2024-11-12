@@ -1,7 +1,8 @@
 const puppeteer = require('puppeteer');
 
 async function scraper() {
-    const browser = await puppeteer.launch();
+    // Launch Puppeteer with headless mode disabled
+    const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
 
     await page.goto('https://google.com');  // Replace with actual URL

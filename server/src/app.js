@@ -1,11 +1,18 @@
 const express = require('express');
 const scraper = require('./scrapper');
+const cors = require('cors');
+
 const app = express();
 const PORT = 5000;
 
-app.get('/scrape', async (req, res) => {
+app.use(cors());
+app.use(express.json()); // Enable parsing of JSON bodies
+
+// Change to POST to match the client
+app.post('/scrape', async (req, res) => {
     try {
-        const data = await scraper();
+        const { exportCountry, destinationCountry, product } = req.body;
+        const data = await scraper(exportCountry, destinationCountry, product);
         res.json(data);
     } catch (error) {
         res.status(500).json({ message: 'Error scraping data', error });
