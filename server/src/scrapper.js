@@ -41,13 +41,9 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.click('#submit');
         console.log('Clicked the submit button');
 
-        // // Wait for the results page to load fully
-        // await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
-        // console.log('Results loaded');
-
         // Wait for the specific #collapseExample element to ensure the page has fully loaded its content
         await page.waitForSelector('#collapseExample', { visible: true, timeout: 10000 });
-        console.log('Found #collapseExample on the results page');
+        console.log('Results loaded');
         // Extract the product name from #collapseExample after results load
         const resultData = await page.evaluate((exportCountry, destinationCountry) => {
             const overview = {
@@ -55,11 +51,18 @@ async function scraper(exportCountry, destinationCountry, product) {
                 importing_country: destinationCountry,
                 product: document.querySelector('#collapseExample')?.textContent.trim() || '',
 
-                // Placeholder values for now
+                // Extracting customs tariffs for MFN and Preferential tariffs
                 customs_tariffs: {
-                    mfn: 0,
-                    pref: 0
+                    mfn: {
+                        applied: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || '0'),
+                        average: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || '0')
+                    },
+                    preferential: {
+                        applied: parseFloat(document.querySelector('tr.even > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || 'null'),
+                        average: parseFloat(document.querySelector('tr.even > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || 'null')
+                    }
                 },
+
                 trade_remedies: null,
                 regulatory_requirements: {
                     ntm_year: 0,
@@ -68,6 +71,7 @@ async function scraper(exportCountry, destinationCountry, product) {
             };
             return { overview };
         }, exportCountry, destinationCountry); // Passing parameters to evaluate function
+
 
         return resultData;
 
