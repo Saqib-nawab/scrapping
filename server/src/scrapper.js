@@ -45,7 +45,11 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.waitForSelector('#collapseExample', { visible: true, timeout: 10000 });
         console.log('Results loaded');
         // Extract the product name from #collapseExample after results load
-        const resultData = await page.evaluate((exportCountry, destinationCountry) => {
+        const resultData = await page.evaluate(async (exportCountry, destinationCountry) => {
+            // Wait for the NTM YEAR section to be visible before extracting
+            const ntmYearElement = document.querySelector('.overview-message.overview-message-data strong');
+            const ntmYear = ntmYearElement ? parseInt(ntmYearElement.textContent.trim()) : null;
+
             const overview = {
                 exporting_country: exportCountry,
                 importing_country: destinationCountry,
@@ -65,14 +69,23 @@ async function scraper(exportCountry, destinationCountry, product) {
 
                 trade_remedies: null,
                 regulatory_requirements: {
-                    ntm_year: 0,
+                    ntm_year: ntmYear,
                     import_requirements: []
                 }
             };
+
+            // Find all the legislation toggles
+            const legislationToggles = document.querySelectorAll('.detail-link.toggle');
+
+            // Loop through each toggle and click to reveal details
+            for (let toggle of legislationToggles) {
+                toggle.click();
+            }
+
             return { overview };
-        }, exportCountry, destinationCountry); // Passing parameters to evaluate function
+        }, exportCountry, destinationCountry);
 
-
+        console.log("Scrapped Data:", resultData);
         return resultData;
 
     } catch (error) {
