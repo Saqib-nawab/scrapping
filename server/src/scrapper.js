@@ -4,10 +4,16 @@ async function scraper(exportCountry, destinationCountry, product) {
     const url = 'https://www.macmap.org/';
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
+
+    // Capture console messages from the page context
+    page.on('console', (msg) => {
+        console.log('PAGE LOG:', msg.text());
+    });
+
     await page.goto(url, { waitUntil: 'networkidle2' });
 
     try {
-        // Your existing code for entering export country, destination country, and product
+        // Existing code to set export country, destination country, and product
         await page.waitForSelector('.input.export', { visible: true, timeout: 10000 });
         await page.click('.input.export');
         console.log('Clicked on the element with class "input export"');
@@ -19,7 +25,7 @@ async function scraper(exportCountry, destinationCountry, product) {
         // Enter Destination Country
         await page.waitForSelector('.input.import', { visible: true, timeout: 10000 });
         await page.click('.input.import');
-        console.log('Clicked on the destination country input with tabindex="2"');
+        console.log('Clicked on the destination country input');
         await page.waitForSelector('[tabindex="2"]', { visible: true, timeout: 10000 });
         await page.focus('[tabindex="2"]');
         await page.keyboard.type(destinationCountry);
@@ -42,9 +48,6 @@ async function scraper(exportCountry, destinationCountry, product) {
         // Wait for results to load
         await page.waitForSelector('#collapseExample', { visible: true, timeout: 50000 });
         console.log('Results loaded');
-
-        // Wait for the legislation rows to be present
-        await page.waitForSelector('.toggle-trigger.clickable.styled-row', { visible: true, timeout: 15000 });
 
         // Get all legislation rows and retrieve their ids
         const legislationRowSelectors = [];
@@ -92,44 +95,62 @@ async function scraper(exportCountry, destinationCountry, product) {
                     const row = document.querySelector(selector);
                     if (row) {
                         row.click(); // Open the popover
+                        console.log(`Clicked on row: ${selector}`);
 
-                        // Wait for the popover to appear
-                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        // Wait for the modal to appear with a timeout
+                        const modalVisible = await new Promise(resolve => {
+                            setTimeout(() => resolve(false), 10000);
+                            const checkModal = setInterval(() => {
+                                const modal = document.querySelector('.modal.show');
+                                if (modal) {
+                                    clearInterval(checkModal);
+                                    resolve(true);
+                                }
+                            }, 500);
+                        });
 
-                        // Get the expanded content in the popover
-                        const expandedContent = document.querySelector('.expanded');
-                        if (expandedContent) {
-                            const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
-                            const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
-                                const labelElement = detail.querySelector('.measure-property');
-                                const label = labelElement ? labelElement.textContent.trim() : '';
-                                const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
-                                const linkElement = detail.querySelector('a');
-                                const link = linkElement ? linkElement.href : null;
+                        if (modalVisible) {
+                            const expandedContent = document.querySelector('.modal.show .expanded');
+                            if (expandedContent) {
+                                const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
+                                const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
+                                    const labelElement = detail.querySelector('.measure-property');
+                                    const label = labelElement ? labelElement.textContent.trim() : '';
+                                    const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
+                                    const linkElement = detail.querySelector('a');
+                                    const link = linkElement ? linkElement.href : null;
 
-                                return { label, text, link };
-                            });
+                                    return { label, text, link };
+                                });
 
-                            overview.regulatory_requirements.import_requirements.push({
-                                name: requirementTitle,
-                                data: detailsList
-                            });
-                        }
+                                overview.regulatory_requirements.import_requirements.push({
+                                    name: requirementTitle,
+                                    data: detailsList
+                                });
+                                console.log(`Requirement added: ${requirementTitle}`);
+                            } else {
+                                console.log(`No expanded content found for selector: ${selector}`);
+                            }
 
-                        // Close the popover
-                        const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
-                        if (closeButton) {
-                            closeButton.click();
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                            // Close the popover
+                            const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
+                            if (closeButton) {
+                                closeButton.click();
+                                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for modal to close
+                                console.log(`Closed modal for selector: ${selector}`);
+                            } else {
+                                console.log(`Close button not found for modal of selector: ${selector}`);
+                            }
+                        } else {
+                            console.log(`Modal did not appear for selector: ${selector}`);
                         }
                     }
                 }
-
                 return { overview };
             },
             exportCountry,
             destinationCountry,
-            legislationRowSelectors // Pass row selectors to use within evaluate
+            legislationRowSelectors
         );
 
         console.log("Scraped Data:", resultData);
