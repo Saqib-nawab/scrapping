@@ -94,26 +94,23 @@ async function scraper(exportCountry, destinationCountry, product) {
                 for (let selector of legislationRowSelectors) {
                     const row = document.querySelector(selector);
                     if (row) {
-                        row.click(); // Open the popover
+                        row.click(); // Click to open the modal
                         console.log(`Clicked on row: ${selector}`);
 
-                        // Wait for the modal to appear with a timeout
-                        const modalVisible = await new Promise(resolve => {
-                            setTimeout(() => resolve(false), 10000);
-                            const checkModal = setInterval(() => {
-                                const modal = document.querySelector('.modal.show');
-                                if (modal) {
-                                    clearInterval(checkModal);
-                                    resolve(true);
-                                }
-                            }, 500);
-                        });
+                        // Wait for the modal content to be visible
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Adjust delay if necessary
 
-                        if (modalVisible) {
-                            const expandedContent = document.querySelector('.modal.show .expanded');
-                            if (expandedContent) {
-                                const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
-                                const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
+                        // Locate the expanded content in the modal
+                        const modalContent = document.querySelector('.modal-body.modal-for-details .ntm-detail-responsive .result-ntm-details');
+                        if (modalContent) {
+                            // Find all legislation requirements within the modal
+                            const requirements = Array.from(modalContent.querySelectorAll('.req-list'));
+
+                            requirements.forEach(requirement => {
+                                const requirementTitle = requirement.querySelector('.req-title')?.textContent.trim() || '';
+
+                                // Extract details from each <li> within the .req-detail list
+                                const detailsList = Array.from(requirement.querySelectorAll('.req-detail li')).map(detail => {
                                     const labelElement = detail.querySelector('.measure-property');
                                     const label = labelElement ? labelElement.textContent.trim() : '';
                                     const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
@@ -123,29 +120,29 @@ async function scraper(exportCountry, destinationCountry, product) {
                                     return { label, text, link };
                                 });
 
+                                // Add the requirement details to the import_requirements array
                                 overview.regulatory_requirements.import_requirements.push({
                                     name: requirementTitle,
                                     data: detailsList
                                 });
                                 console.log(`Requirement added: ${requirementTitle}`);
-                            } else {
-                                console.log(`No expanded content found for selector: ${selector}`);
-                            }
-
-                            // Close the popover
-                            const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
-                            if (closeButton) {
-                                closeButton.click();
-                                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for modal to close
-                                console.log(`Closed modal for selector: ${selector}`);
-                            } else {
-                                console.log(`Close button not found for modal of selector: ${selector}`);
-                            }
+                            });
                         } else {
-                            console.log(`Modal did not appear for selector: ${selector}`);
+                            console.log(`No expanded content found for selector: ${selector}`);
+                        }
+
+                        // Close the modal using the close button in the modal footer
+                        const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
+                        if (closeButton) {
+                            closeButton.click();
+                            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the modal to close
+                            console.log(`Closed modal for selector: ${selector}`);
+                        } else {
+                            console.log(`Close button not found for modal of selector: ${selector}`);
                         }
                     }
                 }
+
                 return { overview };
             },
             exportCountry,
