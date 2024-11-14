@@ -16,7 +16,7 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.keyboard.type(exportCountry);
         console.log(`Typed "${exportCountry}" into the export field`);
 
-        // Enter Destination Country using `tabindex="2"` selector
+        // Enter Destination Country
         await page.waitForSelector('.input.import', { visible: true, timeout: 10000 });
         await page.click('.input.import');
         console.log('Clicked on the destination country input with tabindex="2"');
@@ -39,108 +39,106 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.click('#submit');
         console.log('Clicked the submit button');
 
-        // Wait for the specific #collapseExample element to ensure the page has fully loaded its content after searching
-        await page.waitForSelector('#collapseExample', { visible: true, timeout: 10000 });
+        // Wait for results to load
+        await page.waitForSelector('#collapseExample', { visible: true, timeout: 50000 });
         console.log('Results loaded');
-        // Extract the product name from #collapseExample after results load
-        const resultData = await page.evaluate(async (exportCountry, destinationCountry) => {
-            // Wait for the NTM YEAR section to be visible before extracting
-            const ntmYearElement = document.querySelector('.overview-message.overview-message-data strong');
-            const ntmYear = ntmYearElement ? parseInt(ntmYearElement.textContent.trim()) : null;
 
-            const overview = {
-                exporting_country: exportCountry,
-                importing_country: destinationCountry,
-                product: document.querySelector('#collapseExample')?.textContent.trim() || '',
-                customs_tariffs: {
-                    mfn: {
-                        applied: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || '0'),
-                        average: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || '0')
+        // Wait for the legislation rows to be present
+        await page.waitForSelector('.toggle-trigger.clickable.styled-row', { visible: true, timeout: 15000 });
+
+        // Get all legislation rows and retrieve their ids
+        const legislationRowSelectors = [];
+        const legislationRows = await page.$$('.toggle-trigger.clickable.styled-row');
+
+        for (let row of legislationRows) {
+            const idHandle = await row.getProperty('id');
+            const id = await idHandle.jsonValue();
+            legislationRowSelectors.push(`#${id}`);
+        }
+        console.log("Legislation Row Selectors:", legislationRowSelectors);
+        if (legislationRowSelectors.length === 0) {
+            throw new Error("No legislation rows found on the page.");
+        }
+
+        // Execute the main scraping logic in the page context
+        const resultData = await page.evaluate(
+            async (exportCountry, destinationCountry, legislationRowSelectors) => {
+                const ntmYearElement = document.querySelector('.overview-message.overview-message-data strong');
+                const ntmYear = ntmYearElement ? parseInt(ntmYearElement.textContent.trim()) : null;
+
+                const overview = {
+                    exporting_country: exportCountry,
+                    importing_country: destinationCountry,
+                    product: document.querySelector('#collapseExample')?.textContent.trim() || '',
+                    customs_tariffs: {
+                        mfn: {
+                            applied: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || '0'),
+                            average: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || '0')
+                        },
+                        preferential: {
+                            applied: parseFloat(document.querySelector('tr.even > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || 'null'),
+                            average: parseFloat(document.querySelector('tr.even > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || 'null')
+                        }
                     },
-                    preferential: {
-                        applied: parseFloat(document.querySelector('tr.even > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || 'null'),
-                        average: parseFloat(document.querySelector('tr.even > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || 'null')
+                    trade_remedies: null,
+                    regulatory_requirements: {
+                        ntm_year: ntmYear,
+                        import_requirements: []
                     }
-                },
-                trade_remedies: null,
-                regulatory_requirements: {
-                    ntm_year: ntmYear,
-                    import_requirements: []
-                }
-            };
+                };
 
-            // Wait explicitly for the legislation rows to load
-            await page.waitForSelector('.toggle-trigger.clickable.styled-row', { visible: true, timeout: 15000 });
+                // Loop through each legislation row by selector
+                for (let selector of legislationRowSelectors) {
+                    const row = document.querySelector(selector);
+                    if (row) {
+                        row.click(); // Open the popover
 
-            // Select the legislation rows
-            const legislationRows = await page.$$('.toggle-trigger.clickable.styled-row');
+                        // Wait for the popover to appear
+                        await new Promise(resolve => setTimeout(resolve, 5000));
 
-            if (!legislationRows || legislationRows.length === 0) {
-                throw new Error("No legislation rows found on the page.");
-            }
+                        // Get the expanded content in the popover
+                        const expandedContent = document.querySelector('.expanded');
+                        if (expandedContent) {
+                            const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
+                            const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
+                                const labelElement = detail.querySelector('.measure-property');
+                                const label = labelElement ? labelElement.textContent.trim() : '';
+                                const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
+                                const linkElement = detail.querySelector('a');
+                                const link = linkElement ? linkElement.href : null;
 
+                                return { label, text, link };
+                            });
 
-            for (let row of legislationRows) {
-                row.click(); // Click to open the popover
+                            overview.regulatory_requirements.import_requirements.push({
+                                name: requirementTitle,
+                                data: detailsList
+                            });
+                        }
 
-                // Wait for the popover to appear and ensure it has loaded
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // Locate the expanded content in the popover
-                const expandedContent = document.querySelector('.expanded');
-                if (expandedContent) {
-                    // Extract the title of the requirement
-                    const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
-
-                    // Extract details from each <li> inside the .req-detail list
-                    const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
-                        const labelElement = detail.querySelector('.measure-property');
-                        const label = labelElement ? labelElement.textContent.trim() : '';
-
-                        // The rest of the content after the label
-                        const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
-
-                        // For links, get the href attribute if it's a document or link
-                        const linkElement = detail.querySelector('a');
-                        const link = linkElement ? linkElement.href : null;
-
-                        return {
-                            label,
-                            text,
-                            link
-                        };
-                    });
-
-                    // Add requirement and details to the import_requirements array
-                    overview.regulatory_requirements.import_requirements.push({
-                        name: requirementTitle,
-                        data: detailsList
-                    });
+                        // Close the popover
+                        const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
+                        if (closeButton) {
+                            closeButton.click();
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
                 }
 
-                // Close the popover by clicking the Close button
-                const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
-                if (closeButton) {
-                    closeButton.click();
-                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the popover to close
-                }
-            }
+                return { overview };
+            },
+            exportCountry,
+            destinationCountry,
+            legislationRowSelectors // Pass row selectors to use within evaluate
+        );
 
-            return { overview };
-        }, exportCountry, destinationCountry);
-
-
-
-
-
-        console.log("Scrapped Data:", resultData);
+        console.log("Scraped Data:", resultData);
         return resultData;
 
     } catch (error) {
         console.error('Error interacting with elements:', error);
         return { message: 'Error during scraping', error };
     } finally {
-        await new Promise(resolve => setTimeout(resolve, 90000000));
         await browser.close();
     }
 }
