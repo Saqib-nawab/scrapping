@@ -51,7 +51,13 @@ async function scraper(exportCountry, destinationCountry, product) {
 
         // Get all legislation rows and retrieve their ids
         const legislationRowSelectors = [];
+        // Wait for legislation rows to appear (20 seconds)
+        await page.waitForSelector('.toggle-trigger.clickable.styled-row', { visible: true, timeout: 20000 });
+        console.log('Legislation rows loaded');
+
+        // Then, get all legislation rows
         const legislationRows = await page.$$('.toggle-trigger.clickable.styled-row');
+
 
         for (let row of legislationRows) {
             const idHandle = await row.getProperty('id');
@@ -112,18 +118,31 @@ async function scraper(exportCountry, destinationCountry, product) {
                             } else {
                                 requirements.forEach(requirement => {
                                     // const requirementTitle = requirement.querySelector('.req-title')?.textContent.trim() || '';
-                                    const requirementTitle = modalContent.querySelector('.details-heading .measure-summary')?.textContent.trim() || '';
+                                    // const requirementTitle = modalContent.querySelector('.details-heading .measure-summary')?.textContent.trim() || '';
+                                    const requirementTitle = modalContent.querySelector('.wrap-for-details > div:nth-child(2) > .measure-summary')?.textContent.trim() || '';
+
 
                                     // Extract details from each <li> within the .req-detail list
                                     const detailsList = Array.from(requirement.querySelectorAll('.req-detail li')).map(detail => {
+                                        // Get the label element within the `li`
                                         const labelElement = detail.querySelector('.measure-property');
                                         const label = labelElement ? labelElement.textContent.trim() : '';
+
+                                        // Extract text by removing the label part (if label exists) and trimming any extra whitespace
                                         const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
+
+                                        // Extract the link (if present)
                                         const linkElement = detail.querySelector('a');
                                         const link = linkElement ? linkElement.href : null;
 
+                                        console.log(`Extracted Detail: Label - "${label}", Text - "${text}", Link - "${link}"`);
+
                                         return { label, text, link };
                                     });
+
+                                    // After mapping, you can log the full detailsList to see the extracted data
+                                    console.log("Extracted Details List:", detailsList);
+
 
                                     // Add the requirement details to the import_requirements array
                                     overview.regulatory_requirements.import_requirements.push({
