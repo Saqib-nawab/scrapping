@@ -4,8 +4,6 @@ async function scraper(exportCountry, destinationCountry, product) {
     const url = 'https://www.macmap.org/';
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
-
-    // Navigate to the URL
     await page.goto(url, { waitUntil: 'networkidle2' });
 
     try {
@@ -41,7 +39,7 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.click('#submit');
         console.log('Clicked the submit button');
 
-        // Wait for the specific #collapseExample element to ensure the page has fully loaded its content
+        // Wait for the specific #collapseExample element to ensure the page has fully loaded its content after searching
         await page.waitForSelector('#collapseExample', { visible: true, timeout: 10000 });
         console.log('Results loaded');
         // Extract the product name from #collapseExample after results load
@@ -54,8 +52,6 @@ async function scraper(exportCountry, destinationCountry, product) {
                 exporting_country: exportCountry,
                 importing_country: destinationCountry,
                 product: document.querySelector('#collapseExample')?.textContent.trim() || '',
-
-                // Extracting customs tariffs for MFN and Preferential tariffs
                 customs_tariffs: {
                     mfn: {
                         applied: parseFloat(document.querySelector('tr:nth-of-type(1) > td:nth-of-type(2)')?.textContent.trim().replace('%', '') || '0'),
@@ -66,7 +62,6 @@ async function scraper(exportCountry, destinationCountry, product) {
                         average: parseFloat(document.querySelector('tr.even > td:nth-of-type(3)')?.textContent.trim().replace('%', '') || 'null')
                     }
                 },
-
                 trade_remedies: null,
                 regulatory_requirements: {
                     ntm_year: ntmYear,
@@ -74,16 +69,69 @@ async function scraper(exportCountry, destinationCountry, product) {
                 }
             };
 
-            // Find all the legislation toggles
-            const legislationToggles = document.querySelectorAll('.detail-link.toggle');
+            // Wait explicitly for the legislation rows to load
+            await page.waitForSelector('.toggle-trigger.clickable.styled-row', { visible: true, timeout: 15000 });
 
-            // Loop through each toggle and click to reveal details
-            for (let toggle of legislationToggles) {
-                toggle.click();
+            // Select the legislation rows
+            const legislationRows = await page.$$('.toggle-trigger.clickable.styled-row');
+
+            if (!legislationRows || legislationRows.length === 0) {
+                throw new Error("No legislation rows found on the page.");
+            }
+
+
+            for (let row of legislationRows) {
+                row.click(); // Click to open the popover
+
+                // Wait for the popover to appear and ensure it has loaded
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Locate the expanded content in the popover
+                const expandedContent = document.querySelector('.expanded');
+                if (expandedContent) {
+                    // Extract the title of the requirement
+                    const requirementTitle = expandedContent.querySelector('.req-title')?.textContent.trim() || '';
+
+                    // Extract details from each <li> inside the .req-detail list
+                    const detailsList = Array.from(expandedContent.querySelectorAll('.req-detail li')).map(detail => {
+                        const labelElement = detail.querySelector('.measure-property');
+                        const label = labelElement ? labelElement.textContent.trim() : '';
+
+                        // The rest of the content after the label
+                        const text = labelElement ? detail.textContent.replace(label, '').trim() : detail.textContent.trim();
+
+                        // For links, get the href attribute if it's a document or link
+                        const linkElement = detail.querySelector('a');
+                        const link = linkElement ? linkElement.href : null;
+
+                        return {
+                            label,
+                            text,
+                            link
+                        };
+                    });
+
+                    // Add requirement and details to the import_requirements array
+                    overview.regulatory_requirements.import_requirements.push({
+                        name: requirementTitle,
+                        data: detailsList
+                    });
+                }
+
+                // Close the popover by clicking the Close button
+                const closeButton = document.querySelector('.modal-footer.footer-white .btn.btn-secondary[data-dismiss="modal"]');
+                if (closeButton) {
+                    closeButton.click();
+                    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for the popover to close
+                }
             }
 
             return { overview };
         }, exportCountry, destinationCountry);
+
+
+
+
 
         console.log("Scrapped Data:", resultData);
         return resultData;
@@ -92,6 +140,7 @@ async function scraper(exportCountry, destinationCountry, product) {
         console.error('Error interacting with elements:', error);
         return { message: 'Error during scraping', error };
     } finally {
+        await new Promise(resolve => setTimeout(resolve, 90000000));
         await browser.close();
     }
 }
