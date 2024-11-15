@@ -110,7 +110,7 @@ async function scraper(exportCountry, destinationCountry, product) {
             const expandedContentSelector = `#tr-nsd-${parentDetailId}`;
 
             // Wait for the expanded content of this legislation to load
-            await page.waitForSelector(expandedContentSelector, { visible: true, timeout: 2000 });
+            await page.waitForSelector(expandedContentSelector, { visible: true, timeout: 5000 });
 
             // Extract the main legislation name (e.g., "Labelling requirements")
             const mainLegislationName = await page.$eval(
