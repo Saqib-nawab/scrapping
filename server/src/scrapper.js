@@ -10,23 +10,23 @@ async function scraper(exportCountry, destinationCountry, product) {
 
     await page.goto(url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
     try {
-        await page.waitForSelector('.input.export', { visible: true, timeout: 10000 });
+        await page.waitForSelector('.input.export', { visible: true, timeout: 20000 });
         await page.click('.input.export');
-        await page.waitForSelector('.chosen-search-input', { visible: true, timeout: 10000 });
+        await page.waitForSelector('.chosen-search-input', { visible: true, timeout: 20000 });
         await page.focus('.chosen-search-input');
         await page.keyboard.type(exportCountry);
 
         // Enter Destination Country
-        await page.waitForSelector('.input.import', { visible: true, timeout: 10000 });
+        await page.waitForSelector('.input.import', { visible: true, timeout: 20000 });
         await page.click('.input.import');
-        await page.waitForSelector('[tabindex="2"]', { visible: true, timeout: 10000 });
+        await page.waitForSelector('[tabindex="2"]', { visible: true, timeout: 20000 });
         await page.focus('[tabindex="2"]');
         await page.keyboard.type(destinationCountry);
 
         // Enter Product
-        await page.waitForSelector('.input.product', { visible: true, timeout: 10000 });
+        await page.waitForSelector('.input.product', { visible: true, timeout: 20000 });
         await page.click('.input.product');
-        await page.waitForSelector('#product-list', { visible: true, timeout: 10000 });
+        await page.waitForSelector('#product-list', { visible: true, timeout: 20000 });
         await page.focus('#product-list');
         await page.keyboard.type(product);
 
