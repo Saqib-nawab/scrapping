@@ -26,14 +26,27 @@ async function scraper(exportCountry, destinationCountry, product) {
         const legislationLinks = await page.$$('.detail-link.toggle');
 
         for (let link of legislationLinks) {
-            // Click each `detail-link` span to expand the row details
+            // Click each main `detail-link` span to expand the row details
             await link.click();
             console.log('Clicked on a legislation detail link');
 
-            await page.waitForTimeout(3000);
+            // Wait for the sub-legislations to load
+            await page.waitForSelector('.ntm-summary-detail-result', { visible: true, timeout: 2000 });
+
+            // Select all `span` elements with class `toggle-more` inside the expanded legislation
+            const subLegislationLinks = await page.$$('.ntm-summary-detail-result .toggle-more');
+
+            for (let subLink of subLegislationLinks) {
+                // Click each sub-legislation span to expand its details
+                await subLink.click();
+                console.log('Clicked on a sub-legislation toggle');
+
+                // Pause briefly to allow any loading or animation
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
 
-        console.log('All legislation detail links have been clicked');
+        console.log('All legislation and sub-legislation detail links have been clicked');
 
     } catch (error) {
         console.error('Error interacting with elements:', error);
