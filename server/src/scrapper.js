@@ -49,17 +49,8 @@ async function scraper(exportCountry, destinationCountry, product) {
         const overview = {
             exporting_country: exportCountry,
             importing_country: destinationCountry,
+            trade_regulation_id: product,
             product: await page.$eval('#collapseExample', el => el.textContent.trim()),
-            // customs_tariffs: {
-            //     mfn: {
-            //         applied: parseFloat(await page.$eval('tr:nth-of-type(1) > td:nth-of-type(2)', el => el.textContent.trim().replace('%', '') || '0')),
-            //         average: parseFloat(await page.$eval('tr:nth-of-type(1) > td:nth-of-type(3)', el => el.textContent.trim().replace('%', '') || '0'))
-            //     },
-            //     preferential: {
-            //         applied: parseFloat(await page.$eval('tr.even > td:nth-of-type(2)', el => el.textContent.trim().replace('%', '') || 'null')),
-            //         average: parseFloat(await page.$eval('tr.even > td:nth-of-type(3)', el => el.textContent.trim().replace('%', '') || 'null'))
-            //     }
-            // },
             customs_tariffs: {
                 mfn: {
                     applied: parseFloat(await page.$eval('tr:nth-of-type(1) > td:nth-of-type(2)', el => el.textContent.trim().replace('%', '') || '0')),
@@ -157,8 +148,12 @@ async function scraper(exportCountry, destinationCountry, product) {
             console.log(`Added Parent Legislation and Sub-Legislations for ID: ${parentDetailId}`);
         }
 
+        // Capture raw HTML updated URL of the page
+        const rawHtml = await page.content();
+        const updatedUrl = page.url();
+
         console.log("Scraped Data:", overview);
-        return { overview };
+        return { overview, rawHtml, updatedUrl };
 
     } catch (error) {
         console.error('Error during scraping:', error);
