@@ -139,7 +139,6 @@ async function scraper(exportCountry, destinationCountry, product) {
         const rawHtml = await page.content();
         const updatedUrl = page.url();
 
-        console.log('Scraped Data:', overview);
         return { overview, rawHtml, updatedUrl };
 
     } catch (error) {

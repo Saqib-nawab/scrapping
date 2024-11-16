@@ -27,6 +27,7 @@ app.post('/scrape', async (req, res) => {
 
         // Scrape data
         const { overview, rawHtml, updatedUrl } = await scraper(exportCountry, destinationCountry, product);
+        console.log("overview", overview);
 
         // Insert scraped data into the database
         const query = `
