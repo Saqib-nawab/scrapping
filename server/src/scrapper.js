@@ -39,7 +39,8 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.setViewport({ width: 1280, height: 800 });
         console.log('Resized viewport for legislation interaction');
 
-        const legislationLinks = await page.$$('.detail-link.toggle');
+        await page.waitForSelector('.detail-link.toggle', { visible: true, timeout: 5000 });
+        const legislationLinks = await page.$$('.detail-link.toggle', { visible: true, timeout: 50000 });
 
         const overview = {
             exporting_country: exportCountry,
