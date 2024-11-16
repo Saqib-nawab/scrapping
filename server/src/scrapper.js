@@ -9,6 +9,7 @@ async function scraper(exportCountry, destinationCountry, product) {
     });
 
     await page.goto(url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+
     try {
         await page.waitForSelector('.input.export', { visible: true, timeout: 20000 });
         await page.click('.input.export');
@@ -38,14 +39,8 @@ async function scraper(exportCountry, destinationCountry, product) {
         await page.setViewport({ width: 1280, height: 800 });
         console.log('Resized viewport for legislation interaction');
 
-        await page.waitForSelector('.detail-link.toggle', { visible: true, timeout: 10000 });
-        console.log('Main legislation links are now visible');
-
         const legislationLinks = await page.$$('.detail-link.toggle');
-        if (legislationLinks.length === 0) {
-            throw new Error('No legislation links found on the page.');
-        }
-        console.log(`Found ${legislationLinks.length} main legislation links.`);
+
         const overview = {
             exporting_country: exportCountry,
             importing_country: destinationCountry,
@@ -57,12 +52,8 @@ async function scraper(exportCountry, destinationCountry, product) {
                     average: parseFloat(await page.$eval('tr:nth-of-type(1) > td:nth-of-type(3)', el => el.textContent.trim().replace('%', '') || '0'))
                 },
                 preferential: await (async () => {
-                    // Dynamically find rows with "even" class for preferential tariffs
                     const preferentialRows = await page.$$('tr.even');
-                    let preferentialData = {
-                        applied: null,
-                        average: null
-                    };
+                    let preferentialData = { applied: null, average: null };
 
                     if (preferentialRows.length > 0) {
                         for (let row of preferentialRows) {
@@ -74,7 +65,7 @@ async function scraper(exportCountry, destinationCountry, product) {
                                     parseFloat(el.textContent.trim().replace('%', '') || '0')
                                 );
                                 preferentialData = { applied, average };
-                                break; // Assume first valid row is enough
+                                break;
                             } catch (e) {
                                 console.warn('Error extracting preferential tariff data for a row:', e);
                             }
@@ -84,75 +75,71 @@ async function scraper(exportCountry, destinationCountry, product) {
                 })()
             },
             trade_remedies: null,
-            regulatory_requirements: {
-                ntm_year: parseInt(await page.$eval('.overview-message.overview-message-data strong', el => el.textContent.trim())) || null,
-                import_requirements: []
-            }
+            regulatory_requirements: null // Default as null; updated if legislation links exist
         };
 
-        for (let link of legislationLinks) {
-            // Click the main legislation link
-            await link.click();
-            console.log('Clicked on a main legislation link');
+        if (legislationLinks.length > 0) {
+            console.log('Main legislation links are visible');
+            console.log(`Found ${legislationLinks.length} main legislation links.`);
 
-            // Wait for the expanded content to load
-            const parentDetailId = await link.evaluate(el => el.getAttribute('data-detail'));
-            const mainLegislationSelector = `#parent-tr-nsd-${parentDetailId}`;
-            const expandedContentSelector = `#tr-nsd-${parentDetailId}`;
+            // Initialize regulatory requirements if legislation links exist
+            overview.regulatory_requirements = {
+                ntm_year: parseInt(await page.$eval('.overview-message.overview-message-data strong', el => el.textContent.trim())) || null,
+                import_requirements: []
+            };
 
-            // Wait for the expanded content of this legislation to load
-            await page.waitForSelector(expandedContentSelector, { visible: true, timeout: 5000 });
+            for (let link of legislationLinks) {
+                await link.click();
+                console.log('Clicked on a main legislation link');
 
-            // Extract the main legislation name (e.g., "Labelling requirements")
-            const mainLegislationName = await page.$eval(
-                `${mainLegislationSelector} .measure-summary`,
-                el => el.textContent.trim()
-            );
-            console.log(`Extracted Main Legislation Name: ${mainLegislationName}`);
+                const parentDetailId = await link.evaluate(el => el.getAttribute('data-detail'));
+                const mainLegislationSelector = `#parent-tr-nsd-${parentDetailId}`;
+                const expandedContentSelector = `#tr-nsd-${parentDetailId}`;
 
-            // Get the sub-legislation rows within this legislation
-            const subLegislationRows = await page.$$(`${expandedContentSelector} .req-list`);
+                await page.waitForSelector(expandedContentSelector, { visible: true, timeout: 5000 });
 
-            const subLegislationDetails = [];
+                const mainLegislationName = await page.$eval(
+                    `${mainLegislationSelector} .measure-summary`,
+                    el => el.textContent.trim()
+                );
 
-            for (let subRow of subLegislationRows) {
-                // Extract sub-legislation title
-                const subLegislationTitle = await subRow.$eval('.req-title em', el => el.textContent.trim());
+                console.log(`Extracted Main Legislation Name: ${mainLegislationName}`);
 
-                // Extract sub-legislation details
-                const detailsList = await subRow.$$eval('.req-detail li', details => {
-                    return details.map(detail => {
-                        const label = detail.querySelector('em')?.textContent.trim() || '';
-                        const text = detail.textContent.replace(label, '').trim();
-                        const link = detail.querySelector('a')?.href || null;
-                        return { label, text, link };
+                const subLegislationRows = await page.$$(`${expandedContentSelector} .req-list`);
+                const subLegislationDetails = [];
+
+                for (let subRow of subLegislationRows) {
+                    const subLegislationTitle = await subRow.$eval('.req-title em', el => el.textContent.trim());
+                    const detailsList = await subRow.$$eval('.req-detail li', details => {
+                        return details.map(detail => {
+                            const label = detail.querySelector('em')?.textContent.trim() || '';
+                            const text = detail.textContent.replace(label, '').trim();
+                            const link = detail.querySelector('a')?.href || null;
+                            return { label, text, link };
+                        });
                     });
-                });
 
-                console.log(`Extracted Sub-Legislation: ${subLegislationTitle}`);
-                console.log(`Details:`, detailsList);
+                    console.log(`Extracted Sub-Legislation: ${subLegislationTitle}`);
+                    subLegislationDetails.push({
+                        title: subLegislationTitle,
+                        details: detailsList
+                    });
+                }
 
-                subLegislationDetails.push({
-                    title: subLegislationTitle,
-                    details: detailsList
+                overview.regulatory_requirements.import_requirements.push({
+                    parent_id: parentDetailId,
+                    name: mainLegislationName,
+                    sub_legislations: subLegislationDetails
                 });
             }
-
-            // Add the main legislation and its sub-legislation details to the overview
-            overview.regulatory_requirements.import_requirements.push({
-                parent_id: parentDetailId,
-                name: mainLegislationName,
-                sub_legislations: subLegislationDetails
-            });
-
-            console.log(`Added Parent Legislation and Sub-Legislations for ID: ${parentDetailId}`);
+        } else {
+            console.log('No legislation links found. Setting regulatory requirements to null.');
         }
 
-        // Capture raw HTML updated URL of the page
         const rawHtml = await page.content();
         const updatedUrl = page.url();
 
-        console.log("Scraped Data:", overview);
+        console.log('Scraped Data:', overview);
         return { overview, rawHtml, updatedUrl };
 
     } catch (error) {
