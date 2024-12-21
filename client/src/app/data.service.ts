@@ -14,4 +14,9 @@ export class DataService {
     const requestBody = { exportCountry, destinationCountry, product };
     return this.http.post<any>(this.apiUrl, requestBody);
   }
+
+  private goodsurl = 'http://localhost:5000/goodsscrape';
+  getGoodsData() {
+    return this.http.get<any>(this.goodsurl);
+  }
 }

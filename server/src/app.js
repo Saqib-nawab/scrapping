@@ -1,5 +1,6 @@
 const express = require('express');
 const scraper = require('./scrapper');
+const goodsScrapper = require('./goodsScrapper');
 const cors = require('cors');
 const { Pool } = require('pg');
 require('dotenv').config(); // Load environment variables from .env file
@@ -56,6 +57,18 @@ app.post('/scrape', async (req, res) => {
 
         // Respond with the inserted data
         res.json({ message: 'Data successfully saved to the database', data: result.rows[0] });
+    } catch (error) {
+        console.error('Error occurred:', error);
+        res.status(500).json({ message: 'Error scraping or saving data', error });
+    }
+});
+
+
+app.get('/goodsscrape', async (req, res) => {
+    try {
+        const goods = await goodsScrapper(); // Call the scraper
+        console.log("Scraped Goods:", goods);
+        res.status(200).json(goods); // Send the data as JSON response
     } catch (error) {
         console.error('Error occurred:', error);
         res.status(500).json({ message: 'Error scraping or saving data', error });

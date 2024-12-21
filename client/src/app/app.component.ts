@@ -22,4 +22,16 @@ export class AppComponent {
         console.error('Error:', error);
       });
   }
+
+  async getGoods() {
+    this.dataService.getGoodsData().subscribe(
+      (goods) => {
+        console.log('Goods:', goods); // Properly logs the data
+      },
+      (error) => {
+        console.error('Error fetching goods:', error); // Handles errors
+      }
+    );
+  }
+
 }
