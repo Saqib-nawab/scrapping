@@ -65,15 +65,49 @@ app.post('/scrape', async (req, res) => {
 
 
 app.get('/goodsscrape', async (req, res) => {
+
+
     try {
         const goods = await goodsScrapper(); // Call the scraper
         console.log("Scraped Goods:", goods);
-        res.status(200).json(goods); // Send the data as JSON response
+
+        // Insert scraped data into the database
+        const insertQuery = `
+            INSERT INTO wits_goods (hs_6_code, good) 
+            VALUES ($1, $2)
+            ON CONFLICT (hs_6_code) DO NOTHING; -- Avoid duplicates
+        `;
+
+        // Use a transaction to insert all rows
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            for (const row of goods) {
+                console.log("posting to db", row);
+                for (const item of row) {
+                    const { number, description } = item;
+                    if (number && description) {
+                        await client.query(insertQuery, [number, description]);
+                    }
+                }
+            }
+
+            await client.query('COMMIT');
+            console.log('Data successfully saved to the database.');
+            res.status(200).json({ message: 'Data successfully saved to the database', goods });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error; // Rethrow to be caught in the outer catch block
+        } finally {
+            client.release();
+        }
     } catch (error) {
         console.error('Error occurred:', error);
         res.status(500).json({ message: 'Error scraping or saving data', error });
     }
 });
+
 
 // Start the server
 app.listen(PORT, () => {

@@ -17,22 +17,15 @@ async function goodsScrapper(exportCountry, destinationCountry, product) {
         // Extract data
         const data = await page.evaluate(() => {
             const rows = Array.from(document.querySelectorAll('#searchResults .tabbedBox tbody tr'));
-            return rows.map(row => {
+            return rows.map(row => { // Process all rows
                 return Array.from(row.querySelectorAll('td')).map(td => {
-                    const link = td.querySelector('a'); // Select the link element
-                    if (!link) return { number: null, description: null };
-
-                    const rawText = link.innerText.trim(); // Get raw text
-                    const match = rawText.match(/^(\d{6})\s*--\s*(.+)$/); // Match the number and description
-
-                    const number = match ? match[1] : null; // Extract 6-digit number
-                    const description = match ? match[2] : null; // Extract description
-
+                    const text = td.querySelector('a').innerText.trim();
+                    const number = text.split('--')[0].trim(); // Extract the number
+                    const description = text.split('--')[1]?.trim(); // Extract the description
                     return { number, description };
                 });
             });
         });
-
 
         return data;
 
@@ -46,3 +39,6 @@ async function goodsScrapper(exportCountry, destinationCountry, product) {
 }
 
 module.exports = goodsScrapper;
+//wrking but issue
+
+
