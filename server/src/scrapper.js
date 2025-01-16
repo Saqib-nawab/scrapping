@@ -8,9 +8,23 @@ async function scraper(exportCountry, destinationCountry, product) {
         console.log('PAGE LOG:', msg.text());
     });
 
-    await page.goto(url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+    const pagecontent = await page.goto(url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+    console.log('Page content:', pagecontent);
 
     try {
+
+        // Check for popover and close it if it exists
+        const popoverSelector = 'button[data-dismiss="modal"]';
+        const isPopoverVisible = await page.$(popoverSelector);
+        if (isPopoverVisible) {
+            console.log('Popover detected. Closing it...');
+            await page.click(popoverSelector);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } else {
+            console.log('No popover detected.');
+        }
+
+
         await page.waitForSelector('.input.export', { visible: true, timeout: 20000 });
         await page.click('.input.export');
         await page.waitForSelector('.chosen-search-input', { visible: true, timeout: 20000 });
