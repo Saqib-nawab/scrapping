@@ -110,8 +110,9 @@ app.get('/goodsscrape', async (req, res) => {
 });
 
 
-// New route to get country list from HTML file
+// New route to get country list from HTML file and insert into the database
 app.get('/scrapeCountryList', async (req, res) => {
+    console.log("password", process.env.SQL_PASSWORD);
     try {
         const html = fs.readFileSync('./countryListHtml.html', 'utf8'); // Read the HTML file
         const regex = /<option value="(\d+)">(.*?)<\/option>/g; // Regex to extract values and names
@@ -126,10 +127,35 @@ app.get('/scrapeCountryList', async (req, res) => {
         }
 
         console.log("Extracted Country List:", countries);
-        res.status(200).json({ message: 'Country list successfully extracted', countries });
+
+        // Insert data into the database
+        const insertQuery = `
+            INSERT INTO countries (foreign_id, country_name) 
+            VALUES ($1, $2)
+            ON CONFLICT (foreign_id) DO NOTHING; -- Avoid duplicates
+        `;
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            for (const country of countries) {
+                const { value, name } = country;
+                await client.query(insertQuery, [value, name]);
+            }
+
+            await client.query('COMMIT');
+            console.log('Country list successfully saved to the database.');
+            res.status(200).json({ message: 'Country list successfully saved to the database', countries });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error; // Rethrow to be caught in the outer catch block
+        } finally {
+            client.release();
+        }
     } catch (error) {
-        console.error('Error occurred while extracting country list:', error);
-        res.status(500).json({ message: 'Error extracting country list', error });
+        console.error('Error occurred while saving country list to the database:', error);
+        res.status(500).json({ message: 'Error saving country list to the database', error });
     }
 });
 
