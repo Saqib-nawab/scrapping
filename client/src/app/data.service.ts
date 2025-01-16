@@ -19,4 +19,9 @@ export class DataService {
   getGoodsData() {
     return this.http.get<any>(this.goodsurl);
   }
+
+  private countryurl = 'http://localhost:5000/scrapeCountryList';
+  getCountries() {
+    return this.http.get<any>(this.countryurl);
+  }
 }

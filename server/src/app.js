@@ -2,6 +2,7 @@ const express = require('express');
 const scraper = require('./scrapper');
 const goodsScrapper = require('./goodsScrapper');
 const cors = require('cors');
+const fs = require('fs'); // File system module to read HTML file
 const { Pool } = require('pg');
 require('dotenv').config(); // Load environment variables from .env file
 
@@ -108,6 +109,29 @@ app.get('/goodsscrape', async (req, res) => {
     }
 });
 
+
+// New route to get country list from HTML file
+app.get('/scrapeCountryList', async (req, res) => {
+    try {
+        const html = fs.readFileSync('./countryListHtml.html', 'utf8'); // Read the HTML file
+        const regex = /<option value="(\d+)">(.*?)<\/option>/g; // Regex to extract values and names
+
+        const countries = [];
+        let match;
+
+        while ((match = regex.exec(html)) !== null) {
+            const value = match[1];
+            const name = match[2];
+            countries.push({ value, name });
+        }
+
+        console.log("Extracted Country List:", countries);
+        res.status(200).json({ message: 'Country list successfully extracted', countries });
+    } catch (error) {
+        console.error('Error occurred while extracting country list:', error);
+        res.status(500).json({ message: 'Error extracting country list', error });
+    }
+});
 
 // Start the server
 app.listen(PORT, () => {

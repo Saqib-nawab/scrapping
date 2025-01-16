@@ -34,4 +34,14 @@ export class AppComponent {
     );
   }
 
+  async getCountries() {
+    this.dataService.getCountries().subscribe(
+      (countries) => {
+        console.log('Countries:', countries); // Properly logs the data
+      },
+      (error) => {
+        console.error('Error fetching countries:', error); // Handles errors
+      }
+    );
+  }
 }
