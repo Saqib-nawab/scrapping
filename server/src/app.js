@@ -5,6 +5,7 @@ const cors = require('cors');
 const fs = require('fs'); // File system module to read HTML file
 const { Pool } = require('pg');
 require('dotenv').config(); // Load environment variables from .env file
+const xml2js = require('xml2js');
 
 // Database configuration using environment variables
 const pool = new Pool({
@@ -156,6 +157,56 @@ app.get('/scrapeCountryList', async (req, res) => {
     } catch (error) {
         console.error('Error occurred while saving country list to the database:', error);
         res.status(500).json({ message: 'Error saving country list to the database', error });
+    }
+});
+
+app.post('/importCpv', async (req, res) => {
+    try {
+        const xmlData = fs.readFileSync('./cpv_2008.xml', 'utf8'); // Read the XML file
+        const parser = new xml2js.Parser();
+
+        // Parse the XML file
+        parser.parseString(xmlData, async (err, result) => {
+            if (err) throw err;
+
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+
+                const cpvCodes = result.CPV_CODE.CPV;
+
+                // Iterate over CPV entries
+                for (const cpv of cpvCodes) {
+                    const cpvCode = cpv.$.CODE; // Get the CODE attribute
+                    const texts = cpv.TEXT;
+
+                    for (const text of texts) {
+                        const lang = text.$.LANG;
+                        const description = text._;
+
+                        // Insert into DB
+                        const insertQuery = `
+                            INSERT INTO cpv_codes (cpv_code, lang, description)
+                            VALUES ($1, $2, $3)
+                            ON CONFLICT DO NOTHING;
+                        `;
+                        await client.query(insertQuery, [cpvCode, lang, description]);
+                        console.log("inserted", cpvCode, lang, description);
+                    }
+                }
+
+                await client.query('COMMIT');
+                res.status(200).json({ message: 'CPV data successfully imported into the database' });
+            } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+            } finally {
+                client.release();
+            }
+        });
+    } catch (error) {
+        console.error('Error importing CPV data:', error);
+        res.status(500).json({ message: 'Error importing CPV data', error });
     }
 });
 

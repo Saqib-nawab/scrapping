@@ -1,60 +1,41 @@
 const puppeteer = require('puppeteer');
 
-async function scraper(exportCountry, destinationCountry, product) {
+async function scraper(exportCountry, destinationCountry, product, dynamicUrl) {
+    const startTime = Date.now();
+    const timings = []; // Array to store timings
+    const addCheckpoint = (label) => timings.push({ label, time: Date.now() - startTime }); // Helper function
+
     const url = 'https://www.macmap.org/';
+    console.log("dynamic url:", dynamicUrl);
+
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
+
     page.on('console', (msg) => {
         console.log('PAGE LOG:', msg.text());
     });
 
-    const pagecontent = await page.goto(url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
-    console.log('Page content:', pagecontent);
-
     try {
+        addCheckpoint('Browser launched and page created');
 
-        // Check for popover and close it if it exists
-        const popoverSelector = 'button[data-dismiss="modal"]';
-        const isPopoverVisible = await page.$(popoverSelector);
-        if (isPopoverVisible) {
-            console.log('Popover detected. Closing it...');
-            await page.click(popoverSelector);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        } else {
-            console.log('No popover detected.');
-        }
-
-
-        await page.waitForSelector('.input.export', { visible: true, timeout: 20000 });
-        await page.click('.input.export');
-        await page.waitForSelector('.chosen-search-input', { visible: true, timeout: 20000 });
-        await page.focus('.chosen-search-input');
-        await page.keyboard.type(exportCountry);
-
-        // Enter Destination Country
-        await page.waitForSelector('.input.import', { visible: true, timeout: 20000 });
-        await page.click('.input.import');
-        await page.waitForSelector('[tabindex="2"]', { visible: true, timeout: 20000 });
-        await page.focus('[tabindex="2"]');
-        await page.keyboard.type(destinationCountry);
-
-        // Enter Product
-        await page.waitForSelector('.input.product', { visible: true, timeout: 20000 });
-        await page.click('.input.product');
-        await page.waitForSelector('#product-list', { visible: true, timeout: 20000 });
-        await page.focus('#product-list');
-        await page.keyboard.type(product);
-
-        await page.waitForSelector('#submit', { visible: true, timeout: 10000 });
-        await page.click('#submit');
+        await page.goto(dynamicUrl, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+        addCheckpoint('Page loaded');
 
         await page.waitForSelector('#collapseExample', { visible: true, timeout: 50000 });
+        addCheckpoint('Collapse example found');
 
         await page.setViewport({ width: 1280, height: 800 });
-        console.log('Resized viewport for legislation interaction');
+        addCheckpoint('Viewport resized');
 
-        await page.waitForSelector('.detail-link.toggle', { visible: true, timeout: 5000 });
-        const legislationLinks = await page.$$('.detail-link.toggle', { visible: true, timeout: 50000 });
+        let legislationLinks = [];
+        try {
+            await page.waitForSelector('.detail-link.toggle', { visible: true, timeout: 5000 });
+            legislationLinks = await page.$$('.detail-link.toggle');
+            addCheckpoint('Legislation links found');
+        } catch (e) {
+            console.warn("No legislation links found. Proceeding with empty data for legislation links.");
+            addCheckpoint('No legislation links found');
+        }
 
         const overview = {
             exporting_country: exportCountry,
@@ -92,33 +73,26 @@ async function scraper(exportCountry, destinationCountry, product) {
             trade_remedies: null,
             regulatory_requirements: null // Default as null; updated if legislation links exist
         };
+        addCheckpoint('Overview constructed');
 
         if (legislationLinks.length > 0) {
-            console.log('Main legislation links are visible');
-            console.log(`Found ${legislationLinks.length} main legislation links.`);
-
-            // Initialize regulatory requirements if legislation links exist
             overview.regulatory_requirements = {
                 ntm_year: parseInt(await page.$eval('.overview-message.overview-message-data strong', el => el.textContent.trim())) || null,
                 import_requirements: []
             };
+            addCheckpoint('Regulatory requirements initialized');
 
             for (let link of legislationLinks) {
                 await link.click();
-                console.log('Clicked on a main legislation link');
-
                 const parentDetailId = await link.evaluate(el => el.getAttribute('data-detail'));
                 const mainLegislationSelector = `#parent-tr-nsd-${parentDetailId}`;
                 const expandedContentSelector = `#tr-nsd-${parentDetailId}`;
 
                 await page.waitForSelector(expandedContentSelector, { visible: true, timeout: 5000 });
-
                 const mainLegislationName = await page.$eval(
                     `${mainLegislationSelector} .measure-summary`,
                     el => el.textContent.trim()
                 );
-
-                console.log(`Extracted Main Legislation Name: ${mainLegislationName}`);
 
                 const subLegislationRows = await page.$$(`${expandedContentSelector} .req-list`);
                 const subLegislationDetails = [];
@@ -134,7 +108,6 @@ async function scraper(exportCountry, destinationCountry, product) {
                         });
                     });
 
-                    console.log(`Extracted Sub-Legislation: ${subLegislationTitle}`);
                     subLegislationDetails.push({
                         title: subLegislationTitle,
                         details: detailsList
@@ -147,12 +120,12 @@ async function scraper(exportCountry, destinationCountry, product) {
                     sub_legislations: subLegislationDetails
                 });
             }
-        } else {
-            console.log('No legislation links found. Setting regulatory requirements to null.');
+            addCheckpoint('Legislation details processed');
         }
 
         const rawHtml = await page.content();
         const updatedUrl = page.url();
+        addCheckpoint('Page content retrieved');
 
         return { overview, rawHtml, updatedUrl };
 
@@ -160,7 +133,11 @@ async function scraper(exportCountry, destinationCountry, product) {
         console.error('Error during scraping:', error);
         return { message: 'Error during scraping', error };
     } finally {
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        const endTime = Date.now();
+        console.log(`Scraping process completed in ${(endTime - startTime) / 1000} seconds.`);
+
+        console.log('Timings breakdown:', timings);
+        await new Promise(resolve => setTimeout(resolve, 3000));
         await browser.close();
     }
 }
